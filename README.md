@@ -1,173 +1,207 @@
-# 🎵 Transcripción de Audio/Video con OpenAI
+# Script de Transcripción de Audio/Video con OpenAI
 
-Script CLI optimizado para transcribir archivos de audio y video usando la API de OpenAI con procesamiento paralelo y optimizaciones de rendimiento.
+Script CLI optimizado para transcribir archivos de audio y video usando la API de OpenAI con procesamiento paralelo, caché y reintentos automáticos.
 
-## ✨ Características Principales
+## 🚀 Características Principales
 
-- **Formatos Soportados**: MP4, MOV, M4A, WAV, MP3 y más
-- **Procesamiento Inteligente**: División automática en chunks para archivos largos
-- **Transcripción Paralela**: Procesamiento simultáneo de múltiples segmentos
-- **Modelos Flexibles**: Soporte para `gpt-4o-mini-transcribe` y `whisper-1`
-- **Optimizaciones**: Caché, reintentos automáticos, métricas de rendimiento
-- **Salida Múltiple**: Archivos TXT y JSON con metadatos completos
+- **Formatos soportados**: MP4, MOV, M4A, WAV, MP3, etc.
+- **Extracción automática**: Convierte audio a WAV mono 16kHz con ffmpeg
+- **Segmentación inteligente**: Divide archivos largos en chunks optimizados
+- **Procesamiento paralelo**: Transcribe múltiples chunks simultáneamente
+- **Modelos disponibles**: GPT-4o-mini-transcribe (recomendado) y Whisper-1
+- **Caché inteligente**: Evita reprocesamiento de metadatos
+- **Reintentos automáticos**: Manejo robusto de errores con fallback
+- **Limpieza automática**: Elimina archivos temporales después del procesamiento
 
-## 🚀 Instalación
+## 📋 Requisitos Previos
 
-### Prerrequisitos
+- **Python 3.7+** instalado
+- **ffmpeg** instalado y disponible en PATH
+- **Variables de entorno** con `OPENAI_API_KEY` (usar archivo `.env`)
+- **Dependencias Python**: `openai`, `python-dotenv`, `tqdm`
 
-- Python 3.8+
-- FFmpeg instalado y disponible en PATH
-- Cuenta de OpenAI con API key
+## 🔧 Instalación
 
-### Dependencias
+1. Clona o descarga el repositorio
+2. Instala las dependencias:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Crea un archivo `.env` con tu API key:
+   ```
+   OPENAI_API_KEY=tu_api_key_aqui
+   ```
 
-```bash
-pip install -r requirements.txt
-```
+## 📖 Uso Básico
 
-### Configuración
-
-1. Crea un archivo `.env` en el directorio raíz:
-```bash
-OPENAI_API_KEY=tu_api_key_aqui
-```
-
-2. Asegúrate de que FFmpeg esté instalado:
-   - **Windows**: Descarga desde [ffmpeg.org](https://ffmpeg.org/download.html)
-   - **macOS**: `brew install ffmpeg`
-   - **Linux**: `sudo apt install ffmpeg`
-
-## 📖 Uso
-
-### Comando Básico
-
+### Comando mínimo requerido:
 ```bash
 python transcribir_controlt.py --input "ruta/al/archivo.mp4"
 ```
 
-### Opciones Disponibles
-
+### Comando completo con todos los parámetros:
 ```bash
-python transcribir_controlt.py \
-  --input "video.mp4" \
-  --model "gpt-4o-mini-transcribe" \
-  --chunk-seconds 900 \
-  --out-dir "salida" \
-  --max-workers 3 \
-  --use-cache
+python transcribir_controlt.py --input "ruta/al/archivo.mp4" --model "gpt-4o-mini-transcribe" --chunk-seconds 600 --max-workers 5 --use-cache --keep-chunks
 ```
 
-### Parámetros
+## ⚙️ Parámetros Disponibles
 
-- `--input`: Ruta al archivo de audio/video (requerido)
-- `--model`: Modelo de OpenAI a usar (default: `gpt-4o-mini-transcribe`)
-- `--chunk-seconds`: Duración de cada chunk en segundos (default: 900)
-- `--out-dir`: Directorio de salida (default: `salida_transcripcion`)
-- `--max-workers`: Número máximo de workers paralelos (default: 3)
-- `--use-cache`: Habilitar caché para metadatos
+### Parámetros Obligatorios
+| Parámetro | Descripción | Ejemplo |
+|-----------|-------------|---------|
+| `--input` | Ruta al archivo de video/audio | `"C:/Videos/mi_video.mp4"` |
 
-## 📊 Salida
+### Parámetros Opcionales
+| Parámetro | Descripción | Default | Ejemplo |
+|-----------|-------------|---------|---------|
+| `--model` | Modelo de transcripción | `gpt-4o-mini-transcribe` | `whisper-1` |
+| `--chunk-seconds` | Duración de cada chunk en segundos | `900` (15 min) | `600` |
+| `--out-dir` | Directorio de salida | `salida_transcripcion` | `mis_transcripciones` |
+| `--max-workers` | Número máximo de workers paralelos | `3` | `5` |
+| `--use-cache` | Usar caché para metadatos | `False` | `--use-cache` |
+| `--keep-chunks` | Mantener archivos de chunks | `False` | `--keep-chunks` |
 
-El script genera dos archivos principales:
+## 🎯 Comandos de Optimización
 
-### Archivo TXT
-Transcripción completa del audio/video en formato legible.
-
-### Archivo JSON
-```json
-{
-  "metadata": {
-    "input_file": "ruta/al/archivo.mp4",
-    "model_used": "gpt-4o-mini-transcribe",
-    "chunks_processed": 5,
-    "total_chunks": 5,
-    "performance_metrics": {
-      "extraction_time": 12.5,
-      "transcription_time": 45.2,
-      "avg_chunk_time": 9.04,
-      "cache_hits": 1
-    }
-  },
-  "transcriptions": [...]
-}
+### 1. **Comando Recomendado (Balance Óptimo)**
+```bash
+python transcribir_controlt.py --input "C:/Users/edera/Videos/CursoOWASP/ed_clase_14_Riesgos de Server-Side Request Forgery en Aplicaciones Web.mp4" --model "gpt-4o-mini-transcribe" --chunk-seconds 600 --max-workers 5 --use-cache --keep-chunks
 ```
 
-## 🔧 Optimizaciones
+**Explicación de optimizaciones:**
+- **`--chunk-seconds 600`**: Chunks de 10 minutos para mejor calidad
+- **`--max-workers 5`**: Procesamiento paralelo optimizado
+- **`--use-cache`**: Caché de metadatos para futuras ejecuciones
+- **`--keep-chunks`**: Mantiene chunks para debugging
 
-- **División Inteligente**: Calcula automáticamente el tamaño óptimo de chunks
-- **Procesamiento Paralelo**: Transcribe múltiples segmentos simultáneamente
-- **Sistema de Caché**: Evita reprocesar metadatos de archivos
-- **Reintentos Automáticos**: Manejo robusto de errores con backoff exponencial
-- **Fallback Inteligente**: Cambia automáticamente a `whisper-1` si falla el modelo principal
+### 2. **Comando Rápido (Menos Calidad)**
+```bash
+python transcribir_controlt.py --input "C:/Users/edera/Videos/CursoOWASP/ed_clase_1_OWASP Top 10 Mejores Prácticas de Seguridad en Aplicaciones Web.mp4" --model "whisper-1" --chunk-seconds 900 --max-workers 8
+```
 
-## 📈 Métricas de Rendimiento
+**Explicación:**
+- **`--model "whisper-1"`**: Modelo más rápido pero menos preciso
+- **`--chunk-seconds 900`**: Chunks más grandes para mayor velocidad
+- **`--max-workers 8`**: Máximo paralelismo para velocidad
 
-El script proporciona métricas detalladas:
-- Tiempo total de procesamiento
-- Tiempo de extracción de audio
-- Tiempo de transcripción
-- Número de chunks procesados
-- Tiempo promedio por chunk
-- Hits de caché
+### 3. **Comando Máxima Calidad (Más Lento)**
+```bash
+python transcribir_controlt.py --input "C:/Users/edera/Videos/CursoOWASP/ed_clase_1_OWASP Top 10 Mejores Prácticas de Seguridad en Aplicaciones Web.mp4" --model "gpt-4o-mini-transcribe" --chunk-seconds 300 --max-workers 3 --use-cache
+```
 
-## 🛠️ Estructura del Proyecto
+**Explicación:**
+- **`--chunk-seconds 300`**: Chunks pequeños (5 min) para máxima precisión
+- **`--max-workers 3`**: Menos paralelismo para evitar sobrecarga
+- **`--use-cache`**: Optimización de metadatos
+
+## 📁 Estructura de Salida
 
 ```
-transcripts/
-├── transcribir_controlt.py    # Script principal
-├── requirements.txt            # Dependencias Python
-├── .gitignore                 # Archivos a excluir
-├── README.md                  # Este archivo
-├── TorreC/                    # Archivos de entrada
-└── salida_transcripcion/      # Archivos generados
+salida_transcripcion/
+├── nombre_video_transcripcion.txt      # Transcripción en texto plano
+├── nombre_video_transcripcion.json     # Metadatos y transcripción estructurada
+└── chunks_nombre_video/                # Directorio temporal de chunks (se elimina)
+    ├── chunk_000.wav
+    ├── chunk_001.wav
+    └── ...
 ```
+
+## 🔍 Ejemplos de Uso por Caso
+
+### **Transcripción de Clase/Curso (Recomendado)**
+```bash
+python transcribir_controlt.py --input "clase_seguridad.mp4" --chunk-seconds 600 --max-workers 5 --use-cache
+```
+
+### **Transcripción de Reunión/Call**
+```bash
+python transcribir_controlt.py --input "reunion_equipo.mp4" --chunk-seconds 900 --max-workers 3
+```
+
+### **Transcripción de Podcast/Entrevista**
+```bash
+python transcribir_controlt.py --input "entrevista.mp3" --chunk-seconds 1200 --max-workers 4
+```
+
+### **Transcripción con Chunks Personalizados**
+```bash
+python transcribir_controlt.py --input "video_largo.mp4" --chunk-seconds 1800 --max-workers 6
+```
+
+## ⚡ Consejos de Optimización
+
+### **Para Archivos Cortos (< 15 min)**
+- No es necesario especificar `--chunk-seconds`
+- El archivo se procesa completo sin segmentación
+
+### **Para Archivos Largos (> 15 min)**
+- **Chunks pequeños (300-600s)**: Mayor calidad, más lento
+- **Chunks medianos (600-900s)**: Balance calidad/velocidad
+- **Chunks grandes (900-1800s)**: Mayor velocidad, menor calidad
+
+### **Optimización de Workers**
+- **Sistemas básicos**: `--max-workers 2-3`
+- **Sistemas medios**: `--max-workers 4-5`
+- **Sistemas potentes**: `--max-workers 6-8`
+
+### **Uso de Caché**
+- **Primera ejecución**: Sin caché (calcula duración)
+- **Ejecuciones posteriores**: Con `--use-cache` para ahorrar tiempo
 
 ## 🚨 Solución de Problemas
 
-### Error: FFmpeg no encontrado
+### **Error: "ffmpeg no está instalado"**
 ```bash
-# Verificar instalación
-ffmpeg -version
-ffprobe -version
+# Windows (con chocolatey)
+choco install ffmpeg
 
-# Agregar al PATH si es necesario
+# macOS (con homebrew)
+brew install ffmpeg
+
+# Linux (Ubuntu/Debian)
+sudo apt update && sudo apt install ffmpeg
 ```
 
-### Error: API Key no válida
-```bash
-# Verificar archivo .env
-cat .env
+### **Error: "Falta OPENAI_API_KEY"**
+1. Crea archivo `.env` en el directorio del script
+2. Agrega: `OPENAI_API_KEY=tu_api_key_aqui`
+3. Asegúrate de que el archivo esté en la misma carpeta
 
-# Verificar variable de entorno
-echo $OPENAI_API_KEY
-```
+### **Error de Codificación**
+- Usa barras normales (`/`) en lugar de barras invertidas (`\`) en las rutas
+- Evita caracteres especiales en nombres de archivos
 
-### Archivos muy grandes
-- El script divide automáticamente archivos largos
-- Ajusta `--chunk-seconds` según tus necesidades
-- Usa `--max-workers` para optimizar el paralelismo
+## 📊 Métricas de Performance
+
+El script muestra métricas detalladas al finalizar:
+- **Tiempo total** de procesamiento
+- **Tiempo de extracción** de audio
+- **Tiempo de transcripción** por chunk
+- **Chunks exitosos** vs. total
+- **Tiempo promedio** por chunk
+
+## 🔄 Reintentos y Fallback
+
+- **Reintentos automáticos**: 3 intentos con backoff exponencial
+- **Fallback automático**: Si falla el modelo principal, usa Whisper-1
+- **Manejo de errores**: Continúa procesando otros chunks si uno falla
+
+## 📝 Notas Importantes
+
+- **Directorio único**: Cada video genera su propio directorio de chunks
+- **Limpieza automática**: Los chunks se eliminan al finalizar (a menos que uses `--keep-chunks`)
+- **Formato de salida**: Archivos TXT para lectura y JSON para procesamiento posterior
+- **Idioma**: Por defecto usa español (`es`), configurable en el código
 
 ## 🤝 Contribuciones
 
-¡Las contribuciones son bienvenidas! Por favor:
-
-1. Fork el repositorio
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
-
-## 🙏 Agradecimientos
-
-- OpenAI por proporcionar las APIs de transcripción
-- FFmpeg por las herramientas de procesamiento de audio/video
-- La comunidad de Python por las librerías utilizadas
+Para reportar bugs o sugerir mejoras, por favor:
+1. Verifica que el problema no esté ya documentado
+2. Incluye información del sistema operativo y versión de Python
+3. Adjunta el comando exacto que causó el error
+4. Incluye el mensaje de error completo
 
 ---
 
-**Nota**: Este script está optimizado para archivos en español por defecto. Cambia el parámetro `language` en el código si necesitas otros idiomas.
+**Desarrollado para optimizar el proceso de transcripción de contenido educativo y profesional.**
 

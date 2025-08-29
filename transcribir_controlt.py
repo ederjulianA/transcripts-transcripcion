@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # transcribir_controlt.py
 """
 Script CLI para transcribir audio/video usando la API de OpenAI.
@@ -11,8 +12,8 @@ Características:
 - OPTIMIZACIONES: Procesamiento paralelo, caché, reintentos automáticos
 
 Uso:
-  python transcribir_controlt.py --input "C:\Users\ealvarez\OneDrive - ACCION POINT SA\DocumentosAp\ETB\POC_ultima_milla_etb.mp4"
-
+  python transcribir_controlt.py --input "C:/Users/edera/Videos/CursoOWASP/ed_clase_1_OWASP Top 10 Mejores Prácticas de Seguridad en Aplicaciones Web.mp4"
+    
 Requisitos:
   - ffmpeg instalado y disponible en PATH
   - Variables de entorno con OPENAI_API_KEY (usar .env)
@@ -61,7 +62,7 @@ def track_performance(func):
         start_time = time.time()
         result = func(*args, **kwargs)
         end_time = time.time()
-        print(f"⏱️ {func.__name__}: {end_time - start_time:.2f}s")
+        print(f"[PERFORMANCE] {func.__name__}: {end_time - start_time:.2f}s")
         return result
     return wrapper
 
@@ -77,7 +78,7 @@ def retry_with_backoff(max_retries=3, base_delay=1):
                     if attempt == max_retries - 1:
                         raise e
                     delay = base_delay * (2 ** attempt)
-                    print(f"⚠️ Reintento {attempt + 1}/{max_retries} en {delay}s...")
+                    print(f"[REINTENTO] {attempt + 1}/{max_retries} en {delay}s...")
                     time.sleep(delay)
             return None
         return wrapper
@@ -191,6 +192,15 @@ def write_chunk_result_incremental(chunk_data: dict, output_file: Path, chunk_in
             f.write(f"[Chunk {chunk_index+1}/{total_chunks} - {chunk_data['file']}]\n")
         f.write(chunk_data["text"].strip() + "\n\n")
 
+def cleanup_chunks_directory(chunks_dir: Path):
+    """Limpia el directorio de chunks después de la transcripción"""
+    if chunks_dir.exists():
+        try:
+            shutil.rmtree(chunks_dir)
+            print(f"[LIMPIEZA] Directorio de chunks eliminado: {chunks_dir}")
+        except Exception as e:
+            print(f"[ADVERTENCIA] No se pudo eliminar el directorio de chunks: {e}")
+
 def main():
     start_total_time = time.time()
     metrics = PerformanceMetrics()
@@ -203,6 +213,7 @@ def main():
     parser.add_argument("--out-dir", default="salida_transcripcion", help="Directorio de salida")
     parser.add_argument("--max-workers", type=int, default=3, help="Número máximo de workers paralelos")
     parser.add_argument("--use-cache", action="store_true", help="Usar caché para metadatos")
+    parser.add_argument("--keep-chunks", action="store_true", help="Mantener archivos de chunks después de la transcripción")
     args = parser.parse_args()
 
     load_dotenv()
@@ -237,13 +248,15 @@ def main():
     # 2) Calcular tamaño óptimo de chunk
     optimal_chunk_size = calculate_optimal_chunk_size(duration)
     if optimal_chunk_size != args.chunk_seconds:
-        print(f"🔄 Ajustando tamaño de chunk a {optimal_chunk_size}s (óptimo para {duration}s)")
+        print(f"[AJUSTE] Ajustando tamaño de chunk a {optimal_chunk_size}s (óptimo para {duration}s)")
 
     # 3) Extraer y segmentar audio
     extraction_start = time.time()
     if duration > optimal_chunk_size:
         print(f"Audio largo. Segmentando en chunks de {optimal_chunk_size}s...")
-        chunks_dir = out_dir / "chunks"
+        # Crear directorio único para este video usando su nombre
+        video_name = input_path.stem
+        chunks_dir = out_dir / f"chunks_{video_name}"
         chunk_paths = extract_and_segment_directly(input_path, chunks_dir, optimal_chunk_size)
     else:
         # Para archivos cortos, extraer directamente
@@ -251,6 +264,7 @@ def main():
         print("Extrayendo audio WAV...")
         extract_wav(input_path, wav_path)
         chunk_paths = [wav_path]
+        chunks_dir = None
     
     metrics.extraction_time = time.time() - extraction_start
 
@@ -286,9 +300,9 @@ def main():
                     write_chunk_result_incremental(result, txt_out, len(textos)-1, len(chunk_paths))
                     
                     if result.get("fallback"):
-                        print(f"\n⚠️ Usado fallback 'whisper-1' para {result['file']}")
+                        print(f"\n[FALLBACK] Usado fallback 'whisper-1' para {result['file']}")
                 else:
-                    print(f"\n❌ Error en {result['file']}: {result['error']}")
+                    print(f"\n[ERROR] Error en {result['file']}: {result['error']}")
                 
                 pbar.update(1)
     
@@ -304,6 +318,7 @@ def main():
                 "model_used": args.model,
                 "chunks_processed": successful_chunks,
                 "total_chunks": len(chunk_paths),
+                "chunks_directory": str(chunks_dir) if chunks_dir else None,
                 "performance_metrics": {
                     "extraction_time": metrics.extraction_time,
                     "transcription_time": metrics.transcription_time,
@@ -314,18 +329,26 @@ def main():
             "transcriptions": textos
         }, f, ensure_ascii=False, indent=2)
 
+    # 6) Limpiar archivos temporales (opcional)
+    if not args.keep_chunks and chunks_dir and chunks_dir.exists():
+        cleanup_chunks_directory(chunks_dir)
+    elif chunks_dir and chunks_dir.exists():
+        print(f"[INFO] Archivos de chunks mantenidos en: {chunks_dir}")
+
     metrics.total_time = time.time() - start_total_time
 
-    print(f"\n✅ Transcripción completada!")
-    print(f"📊 Métricas de Performance:")
+    print(f"\n[COMPLETADO] Transcripción completada!")
+    print(f"[METRICAS] Métricas de Performance:")
     print(f"   • Tiempo total: {metrics.total_time:.2f}s")
     print(f"   • Extracción: {metrics.extraction_time:.2f}s")
     print(f"   • Transcripción: {metrics.transcription_time:.2f}s")
     print(f"   • Chunks exitosos: {successful_chunks}/{len(chunk_paths)}")
     print(f"   • Tiempo promedio por chunk: {metrics.avg_chunk_time:.2f}s")
-    print(f"📁 Archivos generados:")
+    print(f"[ARCHIVOS] Archivos generados:")
     print(f"   • TXT:  {txt_out}")
     print(f"   • JSON: {json_out}")
+    if chunks_dir and chunks_dir.exists():
+        print(f"   • Chunks: {chunks_dir}")
 
 if __name__ == "__main__":
     main()
