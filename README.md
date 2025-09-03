@@ -65,7 +65,7 @@ python transcribir_controlt.py --input "ruta/al/archivo.mp4" --model "gpt-4o-min
 
 ### 1. **Comando Recomendado (Balance Óptimo)**
 ```bash
-python transcribir_controlt.py --input "C:/Users/edera/Videos/CursoOWASP/ed_clase_14_Riesgos de Server-Side Request Forgery en Aplicaciones Web.mp4" --model "gpt-4o-mini-transcribe" --chunk-seconds 600 --max-workers 5 --use-cache --keep-chunks
+python transcribir_controlt.py --input "C:/Users/ealvarez/Videos/deploy_ap_aeroman.mkv" --model "gpt-4o-mini-transcribe" --chunk-seconds 600 --max-workers 5 --use-cache --keep-chunks
 ```
 
 **Explicación de optimizaciones:**
@@ -76,7 +76,7 @@ python transcribir_controlt.py --input "C:/Users/edera/Videos/CursoOWASP/ed_clas
 
 ### 2. **Comando Rápido (Menos Calidad)**
 ```bash
-python transcribir_controlt.py --input "C:/Users/edera/Videos/CursoOWASP/ed_clase_1_OWASP Top 10 Mejores Prácticas de Seguridad en Aplicaciones Web.mp4" --model "whisper-1" --chunk-seconds 900 --max-workers 8
+python transcribir_controlt.py --input "C:/Users/edera/Videos/deploy_ap_aeroman.mp4" --model "whisper-1" --chunk-seconds 900 --max-workers 8
 ```
 
 **Explicación:**
