@@ -65,7 +65,7 @@ python transcribir_controlt.py --input "ruta/al/archivo.mp4" --model "gpt-4o-min
 
 ### 1. **Comando Recomendado (Balance Óptimo)**
 ```bash
-python transcribir_controlt.py --input "C:/Users/ealvarez/Videos/deploy_ap_aeroman.mkv" --model "gpt-4o-mini-transcribe" --chunk-seconds 600 --max-workers 5 --use-cache --keep-chunks
+python transcribir_controlt.py --input "C:/Users/ealvarez/Videos/ARUBA_AI_REUNION_1.mkv" --model "gpt-4o-mini-transcribe" --chunk-seconds 600 --max-workers 5 --use-cache --keep-chunks
 ```
 
 **Explicación de optimizaciones:**

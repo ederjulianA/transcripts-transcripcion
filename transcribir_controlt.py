@@ -217,7 +217,13 @@ def main():
     if not input_path.exists():
         sys.exit(f"ERROR: No existe el archivo de entrada: {input_path}")
 
-    out_dir = Path(args.out_dir).resolve()
+    # Crear directorio base de salida
+    base_out_dir = Path(args.out_dir).resolve()
+    base_out_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Crear directorio específico para este video
+    video_name = input_path.stem
+    out_dir = base_out_dir / video_name
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Inicializar cliente
@@ -244,7 +250,11 @@ def main():
     extraction_start = time.time()
     if duration > optimal_chunk_size:
         print(f"Audio largo. Segmentando en chunks de {optimal_chunk_size}s...")
+        # Crear directorio de chunks dentro de la carpeta del video
         chunks_dir = out_dir / "chunks"
+        # Limpiar directorio de chunks anterior si existe
+        if chunks_dir.exists():
+            shutil.rmtree(chunks_dir)
         chunk_paths = extract_and_segment_directly(input_path, chunks_dir, optimal_chunk_size)
     else:
         # Para archivos cortos, extraer directamente
@@ -324,9 +334,12 @@ def main():
     print(f"   • Transcripción: {metrics.transcription_time:.2f}s")
     print(f"   • Chunks exitosos: {successful_chunks}/{len(chunk_paths)}")
     print(f"   • Tiempo promedio por chunk: {metrics.avg_chunk_time:.2f}s")
-    print(f"📁 Archivos generados:")
+    print(f"📁 Estructura de salida:")
+    print(f"   • Carpeta del video: {out_dir}")
     print(f"   • TXT:  {txt_out}")
     print(f"   • JSON: {json_out}")
+    if duration > optimal_chunk_size and args.keep_chunks:
+        print(f"   • Chunks: {out_dir / 'chunks'}")
     
     # Limpiar chunks si no se especifica --keep-chunks
     if not args.keep_chunks and duration > optimal_chunk_size:
