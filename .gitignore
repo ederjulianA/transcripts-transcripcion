@@ -60,3 +60,6 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Datos sensibles (evaluaciones de desempeño con datos personales)
+datos_devs.md
+

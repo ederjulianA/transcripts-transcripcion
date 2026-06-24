@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(python -m py_compile transcribir_controlt.py)",
+      "Bash(python transcribir_controlt.py --input \"C:/Users/ealvarez/Videos/revisemos_aruba.mkv\" --model \"gpt-4o-mini-transcribe\" --chunk-seconds 600 --max-workers 5 --use-cache --keep-chunks)"
+    ]
+  }
+}

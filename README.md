@@ -8,6 +8,8 @@ Script CLI optimizado para transcribir archivos de audio y video usando la API d
 - **Extracción automática**: Convierte audio a WAV mono 16kHz con ffmpeg
 - **Segmentación inteligente**: Divide archivos largos en chunks optimizados
 - **Procesamiento paralelo**: Transcribe múltiples chunks simultáneamente
+- **Orden cronológico garantizado**: La salida respeta siempre el orden real del audio, sin importar en qué orden terminen los chunks en paralelo
+- **Anti-alucinación**: `temperature=0`, prompt de contexto y limpieza automática de bucles de repetición típicos de Whisper sobre silencios/ruido
 - **Modelos disponibles**: GPT-4o-mini-transcribe (recomendado) y Whisper-1
 - **Caché inteligente**: Evita reprocesamiento de metadatos
 - **Reintentos automáticos**: Manejo robusto de errores con fallback
@@ -55,7 +57,7 @@ python transcribir_controlt.py --input "ruta/al/archivo.mp4" --model "gpt-4o-min
 | Parámetro | Descripción | Default | Ejemplo |
 |-----------|-------------|---------|---------|
 | `--model` | Modelo de transcripción | `gpt-4o-mini-transcribe` | `whisper-1` |
-| `--chunk-seconds` | Duración de cada chunk en segundos | `900` (15 min) | `600` |
+| `--chunk-seconds` | Duración de cada chunk en segundos. Si se omite, se calcula automáticamente según la duración | *(auto)* | `600` |
 | `--out-dir` | Directorio de salida | `salida_transcripcion` | `mis_transcripciones` |
 | `--max-workers` | Número máximo de workers paralelos | `3` | `5` |
 | `--use-cache` | Usar caché para metadatos | `False` | `--use-cache` |
@@ -65,7 +67,7 @@ python transcribir_controlt.py --input "ruta/al/archivo.mp4" --model "gpt-4o-min
 
 ### 1. **Comando Recomendado (Balance Óptimo)**
 ```bash
-python transcribir_controlt.py --input "C:/Users/ealvarez/Videos/ARUBA_AI_REUNION_1.mkv" --model "gpt-4o-mini-transcribe" --chunk-seconds 600 --max-workers 5 --use-cache --keep-chunks
+python transcribir_controlt.py --input "C:/Users/ealvarez/Videos/revisemos_aruba.mkv" --model "gpt-4o-mini-transcribe" --chunk-seconds 600 --max-workers 5 --use-cache --keep-chunks
 ```
 
 **Explicación de optimizaciones:**
@@ -74,15 +76,17 @@ python transcribir_controlt.py --input "C:/Users/ealvarez/Videos/ARUBA_AI_REUNIO
 - **`--use-cache`**: Caché de metadatos para futuras ejecuciones
 - **`--keep-chunks`**: Mantiene chunks para debugging
 
-### 2. **Comando Rápido (Menos Calidad)**
+### 2. **Comando Rápido**
 ```bash
 python transcribir_controlt.py --input "C:/Users/edera/Videos/deploy_ap_aeroman.mp4" --model "whisper-1" --chunk-seconds 900 --max-workers 8
 ```
 
 **Explicación:**
-- **`--model "whisper-1"`**: Modelo más rápido pero menos preciso
+- **`--model "whisper-1"`**: Modelo más rápido
 - **`--chunk-seconds 900`**: Chunks más grandes para mayor velocidad
 - **`--max-workers 8`**: Máximo paralelismo para velocidad
+
+> **Nota:** El orden cronológico de los chunks se preserva siempre, incluso con `--max-workers` alto. Las repeticiones en bucle de Whisper (típicas en silencios al inicio de reuniones) se filtran automáticamente.
 
 ### 3. **Comando Máxima Calidad (Más Lento)**
 ```bash
@@ -98,12 +102,13 @@ python transcribir_controlt.py --input "C:/Users/edera/Videos/CursoOWASP/ed_clas
 
 ```
 salida_transcripcion/
-├── nombre_video_transcripcion.txt      # Transcripción en texto plano
-├── nombre_video_transcripcion.json     # Metadatos y transcripción estructurada
-└── chunks_nombre_video/                # Directorio temporal de chunks (se elimina)
-    ├── chunk_000.wav
-    ├── chunk_001.wav
-    └── ...
+└── nombre_video/
+    ├── nombre_video_transcripcion.txt   # Transcripción en texto plano (orden cronológico)
+    ├── nombre_video_transcripcion.json  # Metadatos y transcripción estructurada
+    └── chunks/                          # Chunks temporales (solo si se usa --keep-chunks)
+        ├── chunk_000.wav
+        ├── chunk_001.wav
+        └── ...
 ```
 
 ## 🔍 Ejemplos de Uso por Caso
@@ -129,6 +134,10 @@ python transcribir_controlt.py --input "video_largo.mp4" --chunk-seconds 1800 --
 ```
 
 ## ⚡ Consejos de Optimización
+
+### **Sobre `--chunk-seconds`**
+- Si **omites** el parámetro, el script calcula automáticamente el tamaño óptimo según la duración del archivo
+- Si lo **especificas**, se respeta exactamente el valor que indiques
 
 ### **Para Archivos Cortos (< 15 min)**
 - No es necesario especificar `--chunk-seconds`
@@ -185,6 +194,17 @@ El script muestra métricas detalladas al finalizar:
 - **Reintentos automáticos**: 3 intentos con backoff exponencial
 - **Fallback automático**: Si falla el modelo principal, usa Whisper-1
 - **Manejo de errores**: Continúa procesando otros chunks si uno falla
+
+## 🎙️ Calidad de Transcripción
+
+El script aplica varias defensas para maximizar la calidad y evitar artefactos comunes:
+
+- **Orden cronológico garantizado**: aunque los chunks se transcriben en paralelo y terminan en cualquier orden, la salida final se reordena por índice de chunk para respetar la línea de tiempo del audio.
+- **`temperature=0`**: salida determinística que reduce el riesgo de que el modelo diverja en texto inventado.
+- **Prompt de contexto** (solo `whisper-1`): se envía una descripción del tipo de contenido (reunión en español) para anclar el estilo, la puntuación y el idioma.
+- **Colapso de repeticiones**: Whisper tiende a entrar en bucles sobre silencio o ruido (p. ej. repetir *"Hola. ¿Cómo estás?"* decenas de veces). El script detecta estas secuencias repetidas —frases, patrones de varias frases y palabras sueltas en cadena— y las reduce automáticamente.
+
+> Para máxima calidad en audio con muchos silencios, considera usar `--model "gpt-4o-transcribe"` (no el mini), que tiende a alucinar menos, aunque es más costoso.
 
 ## 📝 Notas Importantes
 
