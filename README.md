@@ -34,7 +34,24 @@ Script CLI optimizado para transcribir archivos de audio y video usando la API d
    OPENAI_API_KEY=tu_api_key_aqui
    ```
 
-## 📖 Uso Básico
+## 🖥️ Interfaz Gráfica (GUI)
+
+Si prefieres no usar la línea de comandos, hay una interfaz gráfica de escritorio (Tkinter, incluida con Python):
+
+```bash
+python transcribir_gui.py
+```
+
+Características de la GUI:
+- **Selector de archivo y carpeta** con diálogos nativos del sistema.
+- **Configuración visual** de todos los parámetros (modelo, chunk, workers, idioma, caché, conservar chunks).
+- **Configuración persistente**: la última configuración usada se guarda en `gui_config.json` y se restaura automáticamente al volver a abrir la aplicación.
+- **Progreso en vivo**: barra de progreso y registro de actividad sin congelar la ventana (la transcripción corre en un hilo aparte).
+- **Botón "Abrir carpeta de salida"** al terminar.
+
+> La GUI reutiliza exactamente el mismo motor de transcripción que la CLI, por lo que la calidad y el comportamiento son idénticos.
+
+## 📖 Uso Básico (CLI)
 
 ### Comando mínimo requerido:
 ```bash

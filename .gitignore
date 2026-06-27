@@ -63,3 +63,6 @@ Thumbs.db
 # Datos sensibles (evaluaciones de desempeño con datos personales)
 datos_devs.md
 
+# Config local de la GUI (última configuración usada)
+gui_config.json
+
