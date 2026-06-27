@@ -311,41 +311,43 @@ def transcribe_chunk_parallel(args_tuple):
             return {"index": index, "chunk": chunk_path.name, "file": chunk_path.name,
                     "error": str(e), "success": False}
 
-def main():
+def transcribe(input_file, model="gpt-4o-mini-transcribe", chunk_seconds=None,
+               out_dir="salida_transcripcion", max_workers=3, use_cache=False,
+               keep_chunks=False, language="es", on_log=None, on_progress=None):
+    """Transcribe un archivo de audio/video. Núcleo reutilizable por la CLI y la GUI.
+
+    Parámetros:
+        on_log(msg): callback opcional para recibir mensajes de log (además de print).
+        on_progress(done, total): callback opcional de progreso por chunk.
+
+    Devuelve un dict con rutas de salida y métricas. Lanza excepción en caso de error
+    (la CLI las convierte en mensajes; la GUI las muestra en un diálogo).
+    """
+    def log(msg):
+        print(msg)
+        if on_log:
+            on_log(msg)
+
     start_total_time = time.time()
     metrics = PerformanceMetrics()
-    
-    parser = argparse.ArgumentParser(description="Transcribir audio/video con OpenAI")
-    parser.add_argument("--input", required=True, help="Ruta al archivo de video/audio")
-    parser.add_argument("--model", default="gpt-4o-mini-transcribe",
-                        help="Modelo a usar (ej: gpt-4o-mini-transcribe o whisper-1)")
-    parser.add_argument("--chunk-seconds", type=int, default=None,
-                        help="Duración de cada chunk en segundos. Si se omite, se calcula automáticamente.")
-    parser.add_argument("--out-dir", default="salida_transcripcion", help="Directorio de salida")
-    parser.add_argument("--max-workers", type=int, default=3, help="Número máximo de workers paralelos")
-    parser.add_argument("--use-cache", action="store_true", help="Usar caché para metadatos")
-    parser.add_argument("--keep-chunks", action="store_true", help="Conservar archivos de chunks después de la transcripción")
-    args = parser.parse_args()
 
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        sys.exit("ERROR: Falta OPENAI_API_KEY en variables de entorno (usa un .env).")
+        raise RuntimeError("Falta OPENAI_API_KEY en variables de entorno (usa un .env).")
 
     check_ffmpeg()
 
-    input_path = Path(args.input).expanduser().resolve()
+    input_path = Path(input_file).expanduser().resolve()
     if not input_path.exists():
-        sys.exit(f"ERROR: No existe el archivo de entrada: {input_path}")
+        raise FileNotFoundError(f"No existe el archivo de entrada: {input_path}")
 
-    # Crear directorio base de salida
-    base_out_dir = Path(args.out_dir).resolve()
+    base_out_dir = Path(out_dir).resolve()
     base_out_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Crear directorio específico para este video
+
     video_name = input_path.stem
-    out_dir = base_out_dir / video_name
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir_video = base_out_dir / video_name
+    out_dir_video.mkdir(parents=True, exist_ok=True)
 
     # Inicializar cliente
     if USE_NEW_SDK:
@@ -355,63 +357,60 @@ def main():
         client = None
 
     # 1) Obtener duración (con caché si está habilitado)
-    if args.use_cache:
+    if use_cache:
         duration = get_cached_duration(input_path)
         metrics.cache_hits += 1
     else:
         duration = ffprobe_duration(input_path)
-    print(f"Duración del audio: {timedelta(seconds=round(duration))}")
+    log(f"Duración del audio: {timedelta(seconds=round(duration))}")
 
-    # 2) Determinar tamaño de chunk: respetar el valor del usuario si lo pasó
-    #    explícitamente; si no, calcular el óptimo según la duración.
-    if args.chunk_seconds is not None:
-        optimal_chunk_size = args.chunk_seconds
-        print(f"📏 Tamaño de chunk: {optimal_chunk_size}s (especificado por el usuario)")
+    # 2) Determinar tamaño de chunk
+    if chunk_seconds is not None:
+        optimal_chunk_size = chunk_seconds
+        log(f"📏 Tamaño de chunk: {optimal_chunk_size}s (especificado por el usuario)")
     else:
         optimal_chunk_size = calculate_optimal_chunk_size(duration)
-        print(f"📏 Tamaño de chunk: {optimal_chunk_size}s (calculado automáticamente)")
+        log(f"📏 Tamaño de chunk: {optimal_chunk_size}s (calculado automáticamente)")
 
     # 3) Extraer y segmentar audio
     extraction_start = time.time()
     if duration > optimal_chunk_size:
-        print(f"Audio largo. Segmentando en chunks de {optimal_chunk_size}s...")
-        # Crear directorio de chunks dentro de la carpeta del video
-        chunks_dir = out_dir / "chunks"
-        # Limpiar directorio de chunks anterior si existe
+        log(f"Audio largo. Segmentando en chunks de {optimal_chunk_size}s...")
+        chunks_dir = out_dir_video / "chunks"
         if chunks_dir.exists():
             if not robust_rmtree(chunks_dir):
-                print(f"⚠️ No se pudo eliminar por completo {chunks_dir} "
-                      f"(¿OneDrive sincronizando o archivo en uso?). Continuando de todos modos.")
+                log(f"⚠️ No se pudo eliminar por completo {chunks_dir} "
+                    f"(¿OneDrive sincronizando o archivo en uso?). Continuando de todos modos.")
         chunk_paths = extract_and_segment_directly(input_path, chunks_dir, optimal_chunk_size)
     else:
-        # Para archivos cortos, extraer directamente
-        wav_path = out_dir / (input_path.stem + ".wav")
-        print("Extrayendo audio WAV...")
+        wav_path = out_dir_video / (input_path.stem + ".wav")
+        log("Extrayendo audio WAV...")
         extract_wav(input_path, wav_path)
         chunk_paths = [wav_path]
-    
+
     metrics.extraction_time = time.time() - extraction_start
 
     # 4) Transcribir en paralelo
-    print(f"Transcribiendo {len(chunk_paths)} archivo(s) con el modelo '{args.model}' (paralelo)...")
+    log(f"Transcribiendo {len(chunk_paths)} archivo(s) con el modelo '{model}' (paralelo)...")
     transcription_start = time.time()
-    
-    txt_out = out_dir / (input_path.stem + "_transcripcion.txt")
-    json_out = out_dir / (input_path.stem + "_transcripcion.json")
+
+    txt_out = out_dir_video / (input_path.stem + "_transcripcion.txt")
+    json_out = out_dir_video / (input_path.stem + "_transcripcion.json")
 
     textos = []
     successful_chunks = 0
+    total = len(chunk_paths)
+    done = 0
+    if on_progress:
+        on_progress(0, total)
 
-    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        # Crear tareas para procesamiento paralelo, pasando el índice de cada
-        # chunk para poder reconstruir la cronología al final.
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_chunk = {
-            executor.submit(transcribe_chunk_parallel, (idx, cp, args.model, "es", client)): cp
+            executor.submit(transcribe_chunk_parallel, (idx, cp, model, language, client)): cp
             for idx, cp in enumerate(chunk_paths)
         }
 
-        # Procesar resultados a medida que se completan (solo para feedback/progreso).
-        with tqdm(total=len(chunk_paths), desc="Chunks") as pbar:
+        with tqdm(total=total, desc="Chunks") as pbar:
             for future in as_completed(future_to_chunk):
                 result = future.result()
                 textos.append(result)
@@ -419,17 +418,20 @@ def main():
                 if result["success"]:
                     successful_chunks += 1
                     if result.get("fallback"):
-                        print(f"\n⚠️ Usado fallback 'whisper-1' para {result['file']}")
+                        log(f"⚠️ Usado fallback 'whisper-1' para {result['file']}")
+                    else:
+                        log(f"✔ Chunk completado: {result['file']}")
                 else:
-                    print(f"\n❌ Error en {result['file']}: {result['error']}")
+                    log(f"❌ Error en {result['file']}: {result['error']}")
 
+                done += 1
+                if on_progress:
+                    on_progress(done, total)
                 pbar.update(1)
 
-    # Reordenar por índice de chunk para preservar la cronología del audio,
-    # independientemente del orden en que terminaron los hilos.
+    # Reordenar por índice de chunk para preservar la cronología del audio.
     textos.sort(key=lambda r: r["index"])
 
-    # Escribir el .txt ya ordenado. Para 1 solo chunk, sin cabeceras.
     total_chunks = len(chunk_paths)
     with open(txt_out, "w", encoding="utf-8") as f:
         for result in textos:
@@ -448,7 +450,7 @@ def main():
         json.dump({
             "metadata": {
                 "input_file": str(input_path),
-                "model_used": args.model,
+                "model_used": model,
                 "chunks_processed": successful_chunks,
                 "total_chunks": len(chunk_paths),
                 "performance_metrics": {
@@ -463,34 +465,67 @@ def main():
 
     metrics.total_time = time.time() - start_total_time
 
-    print(f"\n✅ Transcripción completada!")
-    print(f"📊 Métricas de Performance:")
-    print(f"   • Tiempo total: {metrics.total_time:.2f}s")
-    print(f"   • Extracción: {metrics.extraction_time:.2f}s")
-    print(f"   • Transcripción: {metrics.transcription_time:.2f}s")
-    print(f"   • Chunks exitosos: {successful_chunks}/{len(chunk_paths)}")
-    print(f"   • Tiempo promedio por chunk: {metrics.avg_chunk_time:.2f}s")
-    print(f"📁 Estructura de salida:")
-    print(f"   • Carpeta del video: {out_dir}")
-    print(f"   • TXT:  {txt_out}")
-    print(f"   • JSON: {json_out}")
-    if duration > optimal_chunk_size and args.keep_chunks:
-        print(f"   • Chunks: {out_dir / 'chunks'}")
-    
-    # Limpiar chunks si no se especifica --keep-chunks
-    if not args.keep_chunks and duration > optimal_chunk_size:
-        chunks_dir = out_dir / "chunks"
-        if chunks_dir.exists():
-            print(f"🧹 Limpiando archivos de chunks...")
+    log("✅ Transcripción completada!")
+    log("📊 Métricas de Performance:")
+    log(f"   • Tiempo total: {metrics.total_time:.2f}s")
+    log(f"   • Extracción: {metrics.extraction_time:.2f}s")
+    log(f"   • Transcripción: {metrics.transcription_time:.2f}s")
+    log(f"   • Chunks exitosos: {successful_chunks}/{len(chunk_paths)}")
+    log(f"   • Tiempo promedio por chunk: {metrics.avg_chunk_time:.2f}s")
+    log("📁 Estructura de salida:")
+    log(f"   • Carpeta del video: {out_dir_video}")
+    log(f"   • TXT:  {txt_out}")
+    log(f"   • JSON: {json_out}")
+
+    # Limpiar chunks si no se pidió conservarlos
+    if duration > optimal_chunk_size:
+        chunks_dir = out_dir_video / "chunks"
+        if not keep_chunks and chunks_dir.exists():
+            log("🧹 Limpiando archivos de chunks...")
             if robust_rmtree(chunks_dir):
-                print(f"   • Chunks eliminados: {chunks_dir}")
+                log(f"   • Chunks eliminados: {chunks_dir}")
             else:
-                print(f"   ⚠️ No se pudieron eliminar todos los chunks en {chunks_dir} "
-                      f"(¿OneDrive o archivo en uso?). Bórralos manualmente si es necesario.")
-    elif args.keep_chunks and duration > optimal_chunk_size:
-        chunks_dir = out_dir / "chunks"
-        if chunks_dir.exists():
-            print(f"📁 Chunks conservados en: {chunks_dir}")
+                log(f"   ⚠️ No se pudieron eliminar todos los chunks en {chunks_dir} "
+                    f"(¿OneDrive o archivo en uso?). Bórralos manualmente si es necesario.")
+        elif keep_chunks and chunks_dir.exists():
+            log(f"📁 Chunks conservados en: {chunks_dir}")
+
+    return {
+        "txt": str(txt_out),
+        "json": str(json_out),
+        "out_dir": str(out_dir_video),
+        "successful_chunks": successful_chunks,
+        "total_chunks": len(chunk_paths),
+        "metrics": metrics,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Transcribir audio/video con OpenAI")
+    parser.add_argument("--input", required=True, help="Ruta al archivo de video/audio")
+    parser.add_argument("--model", default="gpt-4o-mini-transcribe",
+                        help="Modelo a usar (ej: gpt-4o-mini-transcribe o whisper-1)")
+    parser.add_argument("--chunk-seconds", type=int, default=None,
+                        help="Duración de cada chunk en segundos. Si se omite, se calcula automáticamente.")
+    parser.add_argument("--out-dir", default="salida_transcripcion", help="Directorio de salida")
+    parser.add_argument("--max-workers", type=int, default=3, help="Número máximo de workers paralelos")
+    parser.add_argument("--use-cache", action="store_true", help="Usar caché para metadatos")
+    parser.add_argument("--keep-chunks", action="store_true", help="Conservar archivos de chunks después de la transcripción")
+    args = parser.parse_args()
+
+    try:
+        transcribe(
+            input_file=args.input,
+            model=args.model,
+            chunk_seconds=args.chunk_seconds,
+            out_dir=args.out_dir,
+            max_workers=args.max_workers,
+            use_cache=args.use_cache,
+            keep_chunks=args.keep_chunks,
+        )
+    except Exception as e:
+        sys.exit(f"ERROR: {e}")
+
 
 if __name__ == "__main__":
     main()
